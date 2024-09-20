@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"strconv"
+	"time"
 
 	"github.com/p2eengineering/kalp-sdk-public/kalpsdk"
 )
@@ -14,6 +15,9 @@ const nameKey = "name"
 const symbolKey = "symbol"
 const decimalsKey = "decimals"
 const totalSupplyKey = "totalSupply"
+// Store transaction history in the world state
+const transactionHistoryKey = "transactionHistory"
+
 
 // Define objectType names for prefix
 // const allowancePrefix = "allowance"
@@ -30,6 +34,41 @@ type event struct {
 	From  string `json:"from"`
 	To    string `json:"to"`
 	Value int    `json:"value"`
+}
+
+// transaction represents a record of a token transaction
+type transaction struct {
+	Type   string `json:"type"`   // "mint" or "transfer"
+	From   string `json:"from"`   // Sender's address
+	To     string `json:"to"`     // Receiver's address
+	Value  int    `json:"value"`  // Amount of tokens
+	Timestamp string `json:"timestamp"` // Transaction time
+}
+
+func logTransaction(sdk kalpsdk.TransactionContextInterface, tx transaction) error {
+    // Retrieve existing transaction history
+    historyBytes, err := sdk.GetState(transactionHistoryKey)
+    if err != nil {
+        return fmt.Errorf("failed to retrieve transaction history: %v", err)
+    }
+
+    var history []transaction
+    if historyBytes != nil {
+        if err := json.Unmarshal(historyBytes, &history); err != nil {
+            return fmt.Errorf("failed to unmarshal transaction history: %v", err)
+        }
+    }
+
+    // Append new transaction
+    history = append(history, tx)
+
+    // Save updated history back to state
+    updatedHistoryBytes, err := json.Marshal(history)
+    if err != nil {
+        return fmt.Errorf("failed to marshal updated transaction history: %v", err)
+    }
+
+    return sdk.PutStateWithoutKYC(transactionHistoryKey, updatedHistoryBytes)
 }
 
 // Mint creates new tokens and adds them to minter's account balance
@@ -126,10 +165,11 @@ func (s *SmartContract) Claim(sdk kalpsdk.TransactionContextInterface, amount in
 		return fmt.Errorf("failed to set event: %v", err)
 	}
 
-	log.Printf("minter account %s balance updated from %d to %d", minter, currentBalance, updatedBalance)
+	tx := transaction{"mint", "0x0", minter, amount, time.Now().Format(time.RFC3339)}
+    return logTransaction(sdk, tx)
 
-	return nil
 }
+
 
 // BalanceOf returns the balance of the given account
 func (s *SmartContract) BalanceOf(sdk kalpsdk.TransactionContextInterface, account string) (int, error) {
@@ -245,23 +285,37 @@ func (s *SmartContract) TransferFrom(sdk kalpsdk.TransactionContextInterface, fr
 	// }
 
 	// Emit the Transfer event
-	transferEvent := event{from, to, value}
-	transferEventJSON, err := json.Marshal(transferEvent)
-	if err != nil {
-		return fmt.Errorf("failed to obtain JSON encoding: %v", err)
-	}
-	err = sdk.SetEvent("Transfer", transferEventJSON)
-	if err != nil {
-		return fmt.Errorf("failed to set event: %v", err)
-	}
+    transferEvent := event{from, to, value}
+    transferEventJSON, err := json.Marshal(transferEvent)
+    if err != nil {
+        return fmt.Errorf("failed to obtain JSON encoding: %v", err)
+    }
+    err = sdk.SetEvent("Transfer", transferEventJSON)
+    if err != nil {
+        return fmt.Errorf("failed to set event: %v", err)
+    }
 
-	log.Printf("spender %s allowance updated from %d to %d", spender)
-
-	return nil
+    // Log the transaction
+    tx := transaction{"transfer", from, to, value, time.Now().Format(time.RFC3339)}
+    return logTransaction(sdk, tx)
 }
 
-// Name returns a descriptive name for fungible tokens in this contract
-// returns {String} Returns the name of the token
+func (s *SmartContract) GetTransactionHistory(sdk kalpsdk.TransactionContextInterface) ([]transaction, error) {
+    historyBytes, err := sdk.GetState(transactionHistoryKey)
+    if err != nil {
+        return nil, fmt.Errorf("failed to retrieve transaction history: %v", err)
+    }
+
+    var history []transaction
+    if historyBytes != nil {
+        if err := json.Unmarshal(historyBytes, &history); err != nil {
+            return nil, fmt.Errorf("failed to unmarshal transaction history: %v", err)
+        }
+    }
+
+    return history, nil
+}
+
 
 func (s *SmartContract) Name(sdk kalpsdk.TransactionContextInterface) (string, error) {
 
