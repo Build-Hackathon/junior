@@ -739,7 +739,17 @@ After deploying the smart contract in Kalp Studio, an API endpoint will be gener
   "transactionid": "ijkl9012..."
 }
 ```
+**Transaction History**
+This smart contract now includes a feature that allows you to keep track of all token transactions. Here’s how it works:
 
+**Minting Tokens**: Whenever new tokens are created (minted), the transaction is recorded, including the amount and the account that received the tokens.
+
+**Transferring Tokens**: Each time tokens are transferred from one account to another, the details of that transaction are logged. This includes the sender's address, the recipient's address, and the amount of tokens transferred.
+
+**Viewing History**: You can retrieve the complete transaction history at any time. This allows you to see all past transactions, providing transparency and accountability for all token activities.
+
+How to Access Transaction History
+To access the transaction history, use the GetTransactionHistory function. This will return a list of all recorded transactions, showing you the type (mint or transfer), from which address, to which address, and the amount involved.
 ---
 
 ## Conclusion
